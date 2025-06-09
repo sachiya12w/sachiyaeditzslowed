@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SACHIYA EDITZ 🎶</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(120deg, #6e00ff, #ff4081, #ff9800);
+      background-size: 300% 300%;
+      animation: gradientMove 10s ease infinite;
+      color: white;
+    }
+
+    @keyframes gradientMove {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    h1 {
+      text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5em;
+      margin-top: 30px;
+      white-space: nowrap;
+      overflow: hidden;
+      border-right: 3px solid;
+      width: 18ch;
+      animation: typing 3s steps(12), blink .6s step-end infinite alternate;
+    }
+
+    @keyframes typing { from { width: 0 } }
+    @keyframes blink { 50% { border-color: transparent } }
+
+    form, .admin-login, .song-list {
+      max-width: 600px;
+      margin: 30px auto;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 20px;
+      border-radius: 20px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 10px;
+      font-size: 1em;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #ff4081;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .song-item {
+      margin-top: 20px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 15px;
+    }
+
+    audio { width: 100%; margin-top: 10px; }
+
+    .wave {
+      height: 3px;
+      background: #ff4081;
+      animation: waveMove 1.2s linear infinite;
+    }
+
+    @keyframes waveMove {
+      0% { width: 0% }
+      50% { width: 80% }
+      100% { width: 0% }
+    }
+
+    .ads { text-align: center; margin-top: 30px; }
+
+    .watermark {
+      font-size: 12px;
+      color: #ffccff;
+    }
+  </style>
+</head>
+<body>
+  <h1>SACHIYA EDITZ</h1>
+
+  <div class="admin-login" id="adminLogin">
+    <h2>Admin Login</h2>
+    <input type="email" id="email" placeholder="Email" required />
+    <input type="password" id="password" placeholder="Password" required />
+    <button id="loginBtn">Login</button>
+  </div>
+
+  <form id="uploadForm" style="display:none">
+    <input type="text" id="title" placeholder="Song Title" required />
+    <input type="text" id="artist" placeholder="Artist Name" required />
+    <input type="text" id="category" placeholder="Category" />
+    <textarea id="description" placeholder="Description"></textarea>
+    <input type="text" id="urlSlug" placeholder="Custom URL Slug" />
+    <input type="file" id="audioFile" accept="audio/mp3" required />
+    <input type="file" id="coverImage" accept="image/*" required />
+    <button type="submit">Upload Song</button>
+  </form>
+
+  <div class="song-list" id="songList">
+    <h2>Uploaded Songs</h2>
+  </div>
+
+  <div class="ads">
+    <h3>Advertisement</h3>
+    <p>[Your ad here]</p>
+  </div>
+
+  <!-- Firebase SDK: Module-based scripts at bottom -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs, orderBy, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyArxD6aTkvd8ZS1ngO7Y0UrM82iZFfDBG0",
+      authDomain: "sachiyaeditz-10bd4.firebaseapp.com",
+      projectId: "sachiyaeditz-10bd4",
+      storageBucket: "sachiyaeditz-10bd4.appspot.com",
+      messagingSenderId: "338793213021",
+      appId: "1:338793213021:web:3adb4cc856e6e09006b1b4",
+      measurementId: "G-LJ9LDD4JD9"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    const loginBtn = document.getElementById("loginBtn");
+    const uploadForm = document.getElementById("uploadForm");
+    const adminLogin = document.getElementById("adminLogin");
+    const songList = document.getElementById("songList");
+
+    loginBtn.addEventListener("click", () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      signInWithEmailAndPassword(auth, email, password)
+        .then(() => {
+          uploadForm.style.display = "block";
+          adminLogin.style.display = "none";
+          loadSongs();
+        })
+        .catch(err => alert("Login Failed: " + err.message));
+    });
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        uploadForm.style.display = "block";
+        adminLogin.style.display = "none";
+        loadSongs();
+      }
+    });
+
+    uploadForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const title = document.getElementById("title").value;
+      const artist = document.getElementById("artist").value;
+      const category = document.getElementById("category").value;
+      const description = document.getElementById("description").value;
+      const urlSlug = document.getElementById("urlSlug").value;
+      const audioFile = document.getElementById("audioFile").files[0];
+      const coverImage = document.getElementById("coverImage").files[0];
+
+      const audioRef = ref(storage, `songs/${Date.now()}_${audioFile.name}`);
+      const coverRef = ref(storage, `covers/${Date.now()}_${coverImage.name}`);
+
+      await uploadBytes(audioRef, audioFile);
+      await uploadBytes(coverRef, coverImage);
+
+      const audioURL = await getDownloadURL(audioRef);
+      const coverURL = await getDownloadURL(coverRef);
+
+      await addDoc(collection(db, "songs"), {
+        title,
+        artist,
+        category,
+        description,
+        urlSlug,
+        audioURL,
+        coverURL,
+        uploadedAt: serverTimestamp()
+      });
+
+      alert("Song uploaded successfully!");
+      uploadForm.reset();
+      loadSongs();
+    });
+
+    async function loadSongs() {
+      songList.innerHTML = '<h2>Uploaded Songs</h2>';
+      const q = query(collection(db, "songs"), orderBy("uploadedAt", "desc"));
+      const snapshot = await getDocs(q);
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const item = document.createElement("div");
+        item.className = "song-item";
+        item.innerHTML = `
+          <img src="${data.coverURL}" style="width:100%; border-radius:10px; margin-bottom:10px;" />
+          <h3>${data.title} <span class="watermark">by ${data.artist}</span></h3>
+          <div class="wave"></div>
+          <p><strong>Category:</strong> ${data.category}</p>
+          <p>${data.description}</p>
+          <audio controls src="${data.audioURL}"></audio>
+          <p><a href="${data.audioURL}" download="${data.title}.mp3">Download MP3</a></p>
+        `;
+        songList.appendChild(item);
+      });
+    }
+  </script>
+</body>
+</html>
+
